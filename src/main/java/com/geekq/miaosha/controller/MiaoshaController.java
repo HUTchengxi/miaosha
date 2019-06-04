@@ -13,6 +13,7 @@ import com.geekq.miaosha.service.MiaoShaUserService;
 import com.geekq.miaosha.service.MiaoshaService;
 import com.geekq.miaosha.service.OrderService;
 import com.geekq.miaosha.vo.GoodsVo;
+import com.google.common.util.concurrent.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -28,6 +29,7 @@ import java.awt.image.BufferedImage;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.geekq.miaosha.common.enums.ResultStatus.*;
 
@@ -62,7 +64,7 @@ public class MiaoshaController implements InitializingBean {
      * 5000 * 10
      * get　post get 幂等　从服务端获取数据　不会产生影响　　post 对服务端产生变化
      */
-    @AccessLimit(seconds = 5, maxCount = 5, needLogin = true)
+    //@AccessLimit(seconds = 5, maxCount = 5, needLogin = true)
     @RequestMapping(value="/{path}/do_miaosha", method= RequestMethod.POST)
     @ResponseBody
     public ResultGeekQ<Integer> miaosha(Model model, MiaoshaUser user, @PathVariable("path") String path,
@@ -79,14 +81,14 @@ public class MiaoshaController implements InitializingBean {
             result.withError(REQUEST_ILLEGAL.getCode(), REQUEST_ILLEGAL.getMessage());
             return result;
         }
-//		//使用RateLimiter 限流
-//		RateLimiter rateLimiter = RateLimiter.create(10);
-//		//判断能否在1秒内得到令牌，如果不能则立即返回false，不会阻塞程序
-//		if (!rateLimiter.tryAcquire(1000, TimeUnit.MILLISECONDS)) {
-//			System.out.println("短期无法获取令牌，真不幸，排队也瞎排");
-//			return ResultGeekQ.error(CodeMsg.MIAOSHA_FAIL);
-//
-//		}
+		//使用RateLimiter 限流
+		RateLimiter rateLimiter = RateLimiter.create(0.5);
+		//判断能否在1秒内得到令牌，如果不能则立即返回false，不会阻塞程序
+        rateLimiter.acquire();
+		if (!rateLimiter.tryAcquire(1000, TimeUnit.MILLISECONDS)) {
+			System.out.println("短期无法获取令牌，真不幸，排队也瞎排");
+			return null;
+		}
 
         //是否已经秒杀到
         MiaoshaOrder order = orderService.getMiaoshaOrderByUserIdGoodsId(Long.valueOf(user.getNickname()), goodsId);
@@ -100,7 +102,7 @@ public class MiaoshaController implements InitializingBean {
             result.withError(MIAO_SHA_OVER.getCode(), MIAO_SHA_OVER.getMessage());
             return result;
         }
-        //预见库存
+        //预见库存，即使库存减了后面秒杀失败了也没关系，反正也是小概率，没人在意，展示中奖名单的时候手机号码也是脱敏的
         Long stock = redisService.decr(GoodsKey.getMiaoshaGoodsStock, "" + goodsId);
         if (stock < 0) {
             localOverMap.put(goodsId, true);

@@ -47,6 +47,7 @@ public class MQReceiver {
 			MiaoshaUser user = mm.getUser();
 			long goodsId = mm.getGoodsId();
 
+			// todo: 这里可以针对selectCount加个缓存和内存标记，减少db
 			GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
 	    	int stock = goods.getStockCount();
 	    	if(stock <= 0) {
